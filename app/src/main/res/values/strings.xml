@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">Lab4_SQLite</string>
+    <string name="db_title">Управление заметками (SQLite)</string>
+    <string name="hint_title">Заголовок заметки</string>
+    <string name="hint_content">Текст заметки</string>
+    <string name="btn_add">Добавить</string>
+    <string name="btn_update">Обновить</string>
+    <string name="btn_delete">Удалить</string>
+    <string name="btn_clear_fields">Сброс</string>
+    <string name="list_header">Список сохраненных заметок в SQLite:</string>
+</resources>
