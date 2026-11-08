@@ -1,8 +1,14 @@
 package com.example.lab4_sqlite
 
+import android.content.Context
+import android.graphics.Color
 import android.os.Bundle
+import android.view.View
+import android.view.inputmethod.InputMethodManager
 import android.widget.Button
 import android.widget.EditText
+import android.widget.LinearLayout
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
@@ -14,12 +20,15 @@ import kotlinx.coroutines.withContext
 
 class MainActivity : AppCompatActivity() {
 
+    private lateinit var tvMode: TextView
     private lateinit var etTitle: EditText
     private lateinit var etContent: EditText
     private lateinit var btnAdd: Button
+    private lateinit var layoutEditButtons: LinearLayout
     private lateinit var btnUpdate: Button
     private lateinit var btnDelete: Button
-    private lateinit var btnClear: Button
+    private lateinit var btnCancel: Button
+    private lateinit var tvEmptyState: TextView
     private lateinit var recyclerView: RecyclerView
 
     private lateinit var dbHelper: NotesDbHelper
@@ -33,19 +42,19 @@ class MainActivity : AppCompatActivity() {
 
         dbHelper = NotesDbHelper(this)
 
+        tvMode = findViewById(R.id.tvMode)
         etTitle = findViewById(R.id.etTitle)
         etContent = findViewById(R.id.etContent)
         btnAdd = findViewById(R.id.btnAdd)
+        layoutEditButtons = findViewById(R.id.layoutEditButtons)
         btnUpdate = findViewById(R.id.btnUpdate)
         btnDelete = findViewById(R.id.btnDelete)
-        btnClear = findViewById(R.id.btnClear)
+        btnCancel = findViewById(R.id.btnCancel)
+        tvEmptyState = findViewById(R.id.tvEmptyState)
         recyclerView = findViewById(R.id.recyclerView)
 
         adapter = NotesAdapter(emptyList()) { note ->
-            selectedNoteId = note.id
-            etTitle.setText(note.title)
-            etContent.setText(note.content)
-            Toast.makeText(this, "Выбрана заметка: ${note.title}", Toast.LENGTH_SHORT).show()
+            switchToEditMode(note)
         }
 
         recyclerView.layoutManager = LinearLayoutManager(this)
@@ -57,19 +66,21 @@ class MainActivity : AppCompatActivity() {
             val content = etContent.text.toString().trim()
 
             if (title.isEmpty()) {
-                Toast.makeText(this, "Заголовок не может быть пустым", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Заполните заголовок заметки", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
+
+            hideKeyboard()
 
             lifecycleScope.launch(Dispatchers.IO) {
                 val newId = dbHelper.insertNote(title, content)
                 withContext(Dispatchers.Main) {
                     if (newId != -1L) {
-                        Toast.makeText(this@MainActivity, "Заметка добавлена (ID: $newId)", Toast.LENGTH_SHORT).show()
-                        clearInputs()
+                        Toast.makeText(this@MainActivity, "Заметка сохранена в SQLite!", Toast.LENGTH_SHORT).show()
+                        switchToCreateMode()
                         loadNotes()
                     } else {
-                        Toast.makeText(this@MainActivity, "Ошибка добавления заметки", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@MainActivity, "Ошибка добавления", Toast.LENGTH_SHORT).show()
                     }
                 }
             }
@@ -77,12 +88,7 @@ class MainActivity : AppCompatActivity() {
 
         // Обновление выбранной заметки
         btnUpdate.setOnClickListener {
-            val id = selectedNoteId
-            if (id == null) {
-                Toast.makeText(this, "Выберите заметку из списка для обновления", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-
+            val id = selectedNoteId ?: return@setOnClickListener
             val title = etTitle.text.toString().trim()
             val content = etContent.text.toString().trim()
 
@@ -91,12 +97,14 @@ class MainActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
+            hideKeyboard()
+
             lifecycleScope.launch(Dispatchers.IO) {
                 val rows = dbHelper.updateNote(id, title, content)
                 withContext(Dispatchers.Main) {
                     if (rows > 0) {
-                        Toast.makeText(this@MainActivity, "Заметка обновлена", Toast.LENGTH_SHORT).show()
-                        clearInputs()
+                        Toast.makeText(this@MainActivity, "Изменения сохранены!", Toast.LENGTH_SHORT).show()
+                        switchToCreateMode()
                         loadNotes()
                     } else {
                         Toast.makeText(this@MainActivity, "Ошибка при обновлении", Toast.LENGTH_SHORT).show()
@@ -107,18 +115,16 @@ class MainActivity : AppCompatActivity() {
 
         // Удаление выбранной заметки
         btnDelete.setOnClickListener {
-            val id = selectedNoteId
-            if (id == null) {
-                Toast.makeText(this, "Выберите заметку из списка для удаления", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
+            val id = selectedNoteId ?: return@setOnClickListener
+
+            hideKeyboard()
 
             lifecycleScope.launch(Dispatchers.IO) {
                 val deletedRows = dbHelper.deleteNote(id)
                 withContext(Dispatchers.Main) {
                     if (deletedRows > 0) {
-                        Toast.makeText(this@MainActivity, "Заметка удалена", Toast.LENGTH_SHORT).show()
-                        clearInputs()
+                        Toast.makeText(this@MainActivity, "Заметка удалена!", Toast.LENGTH_SHORT).show()
+                        switchToCreateMode()
                         loadNotes()
                     } else {
                         Toast.makeText(this@MainActivity, "Ошибка при удалении", Toast.LENGTH_SHORT).show()
@@ -127,13 +133,41 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Очистка полей ввода
-        btnClear.setOnClickListener {
-            clearInputs()
+        // Отмена режима редактирования
+        btnCancel.setOnClickListener {
+            hideKeyboard()
+            switchToCreateMode()
         }
 
-        // Первичная загрузка заметок
+        // Первичная загрузка
+        switchToCreateMode()
         loadNotes()
+    }
+
+    private fun switchToCreateMode() {
+        selectedNoteId = null
+        adapter.setSelectedId(null)
+        etTitle.text.clear()
+        etContent.text.clear()
+
+        tvMode.text = "➕ Создание новой заметки"
+        tvMode.setTextColor(Color.parseColor("#00796B"))
+
+        btnAdd.visibility = View.VISIBLE
+        layoutEditButtons.visibility = View.GONE
+    }
+
+    private fun switchToEditMode(note: Note) {
+        selectedNoteId = note.id
+        adapter.setSelectedId(note.id)
+        etTitle.setText(note.title)
+        etContent.setText(note.content)
+
+        tvMode.text = "✏️ Редактирование: ${note.title}"
+        tvMode.setTextColor(Color.parseColor("#1976D2"))
+
+        btnAdd.visibility = View.GONE
+        layoutEditButtons.visibility = View.VISIBLE
     }
 
     private fun loadNotes() {
@@ -141,13 +175,20 @@ class MainActivity : AppCompatActivity() {
             val notes = dbHelper.getAllNotes()
             withContext(Dispatchers.Main) {
                 adapter.updateData(notes)
+                if (notes.isEmpty()) {
+                    tvEmptyState.visibility = View.VISIBLE
+                    recyclerView.visibility = View.GONE
+                } else {
+                    tvEmptyState.visibility = View.GONE
+                    recyclerView.visibility = View.VISIBLE
+                }
             }
         }
     }
 
-    private fun clearInputs() {
-        selectedNoteId = null
-        etTitle.text.clear()
-        etContent.text.clear()
+    private fun hideKeyboard() {
+        val view = currentFocus ?: return
+        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+        imm?.hideSoftInputFromWindow(view.windowToken, 0)
     }
 }
