@@ -10,7 +10,6 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -18,7 +17,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : BaseActivity() {
 
     private lateinit var tvMode: TextView
     private lateinit var etTitle: EditText
@@ -34,7 +33,20 @@ class MainActivity : AppCompatActivity() {
     private lateinit var dbHelper: NotesDbHelper
     private lateinit var adapter: NotesAdapter
 
+    private val databaseErrors = kotlinx.coroutines.CoroutineExceptionHandler { _, error ->
+        runOnUiThread {
+            Toast.makeText(this, "Ошибка базы данных: ${error.localizedMessage}", Toast.LENGTH_LONG).show()
+        }
+    }
+
     private var selectedNoteId: Long? = null
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        selectedNoteId?.let { outState.putLong("selected_id", it) }
+        outState.putString("edit_title", etTitle.text.toString())
+        outState.putString("edit_content", etContent.text.toString())
+        super.onSaveInstanceState(outState)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -72,7 +84,7 @@ class MainActivity : AppCompatActivity() {
 
             hideKeyboard()
 
-            lifecycleScope.launch(Dispatchers.IO) {
+            lifecycleScope.launch(Dispatchers.IO + databaseErrors) {
                 val newId = dbHelper.insertNote(title, content)
                 withContext(Dispatchers.Main) {
                     if (newId != -1L) {
@@ -99,7 +111,7 @@ class MainActivity : AppCompatActivity() {
 
             hideKeyboard()
 
-            lifecycleScope.launch(Dispatchers.IO) {
+            lifecycleScope.launch(Dispatchers.IO + databaseErrors) {
                 val rows = dbHelper.updateNote(id, title, content)
                 withContext(Dispatchers.Main) {
                     if (rows > 0) {
@@ -119,7 +131,7 @@ class MainActivity : AppCompatActivity() {
 
             hideKeyboard()
 
-            lifecycleScope.launch(Dispatchers.IO) {
+            lifecycleScope.launch(Dispatchers.IO + databaseErrors) {
                 val deletedRows = dbHelper.deleteNote(id)
                 withContext(Dispatchers.Main) {
                     if (deletedRows > 0) {
@@ -142,6 +154,14 @@ class MainActivity : AppCompatActivity() {
         // Первичная загрузка
         switchToCreateMode()
         loadNotes()
+        if (savedInstanceState?.containsKey("selected_id") == true) {
+            switchToEditMode(Note(
+                id = savedInstanceState.getLong("selected_id"),
+                title = savedInstanceState.getString("edit_title", ""),
+                content = savedInstanceState.getString("edit_content", ""),
+                timestamp = 0L
+            ))
+        }
     }
 
     private fun switchToCreateMode() {
@@ -171,7 +191,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun loadNotes() {
-        lifecycleScope.launch(Dispatchers.IO) {
+        lifecycleScope.launch(Dispatchers.IO + databaseErrors) {
             val notes = dbHelper.getAllNotes()
             withContext(Dispatchers.Main) {
                 adapter.updateData(notes)

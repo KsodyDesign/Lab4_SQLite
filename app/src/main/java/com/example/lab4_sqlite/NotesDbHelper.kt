@@ -36,63 +36,83 @@ class NotesDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME,
     }
 
     // Создание заметки (Insert)
+    @Synchronized
     fun insertNote(title: String, content: String): Long {
-        val db = writableDatabase
-        val values = ContentValues().apply {
-            put(COLUMN_TITLE, title)
-            put(COLUMN_CONTENT, content)
-            put(COLUMN_TIMESTAMP, System.currentTimeMillis())
+        try {
+            val db = writableDatabase
+            val values = ContentValues().apply {
+                put(COLUMN_TITLE, title)
+                put(COLUMN_CONTENT, content)
+                put(COLUMN_TIMESTAMP, System.currentTimeMillis())
+            }
+            return db.insert(TABLE_NAME, null, values)
+        } finally {
+            close()
         }
-        return db.insert(TABLE_NAME, null, values)
     }
 
     // Получение всех заметок (Read)
+    @Synchronized
     fun getAllNotes(): List<Note> {
-        val notesList = mutableListOf<Note>()
-        val db = readableDatabase
-        val cursor = db.query(
-            TABLE_NAME,
-            null,
-            null,
-            null,
-            null,
-            null,
-            "$COLUMN_TIMESTAMP DESC"
-        )
+        try {
+            val notesList = mutableListOf<Note>()
+            val db = readableDatabase
+            val cursor = db.query(
+                TABLE_NAME,
+                null,
+                null,
+                null,
+                null,
+                null,
+                "$COLUMN_TIMESTAMP DESC"
+            )
 
-        cursor.use { c ->
-            val idIndex = c.getColumnIndexOrThrow(COLUMN_ID)
-            val titleIndex = c.getColumnIndexOrThrow(COLUMN_TITLE)
-            val contentIndex = c.getColumnIndexOrThrow(COLUMN_CONTENT)
-            val timestampIndex = c.getColumnIndexOrThrow(COLUMN_TIMESTAMP)
+            cursor.use { c ->
+                val idIndex = c.getColumnIndexOrThrow(COLUMN_ID)
+                val titleIndex = c.getColumnIndexOrThrow(COLUMN_TITLE)
+                val contentIndex = c.getColumnIndexOrThrow(COLUMN_CONTENT)
+                val timestampIndex = c.getColumnIndexOrThrow(COLUMN_TIMESTAMP)
 
-            while (c.moveToNext()) {
-                val note = Note(
-                    id = c.getLong(idIndex),
-                    title = c.getString(titleIndex),
-                    content = c.getString(contentIndex) ?: "",
-                    timestamp = c.getLong(timestampIndex)
-                )
-                notesList.add(note)
+                while (c.moveToNext()) {
+                    val note = Note(
+                        id = c.getLong(idIndex),
+                        title = c.getString(titleIndex),
+                        content = c.getString(contentIndex) ?: "",
+                        timestamp = c.getLong(timestampIndex)
+                    )
+                    notesList.add(note)
+                }
             }
+            return notesList
+        } finally {
+            close()
         }
-        return notesList
     }
 
     // Обновление заметки (Update)
+    @Synchronized
     fun updateNote(id: Long, title: String, content: String): Int {
-        val db = writableDatabase
-        val values = ContentValues().apply {
-            put(COLUMN_TITLE, title)
-            put(COLUMN_CONTENT, content)
-            put(COLUMN_TIMESTAMP, System.currentTimeMillis())
+        try {
+            val db = writableDatabase
+            val values = ContentValues().apply {
+                put(COLUMN_TITLE, title)
+                put(COLUMN_CONTENT, content)
+                put(COLUMN_TIMESTAMP, System.currentTimeMillis())
+            }
+            return db.update(TABLE_NAME, values, "$COLUMN_ID = ?", arrayOf(id.toString()))
+        } finally {
+            close()
         }
-        return db.update(TABLE_NAME, values, "$COLUMN_ID = ?", arrayOf(id.toString()))
     }
 
     // Удаление заметки (Delete)
+    @Synchronized
     fun deleteNote(id: Long): Int {
-        val db = writableDatabase
-        return db.delete(TABLE_NAME, "$COLUMN_ID = ?", arrayOf(id.toString()))
+        try {
+            val db = writableDatabase
+            return db.delete(TABLE_NAME, "$COLUMN_ID = ?", arrayOf(id.toString()))
+        } finally {
+            close()
+        }
     }
 }
